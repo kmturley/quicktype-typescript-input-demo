@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'fs';
 import { globSync } from 'glob';
-import { dirname } from 'path';
-import { InputData, JSONSchemaInput, JSONSchemaSourceData, JSONSchemaStore, RendererOptions, SerializedRenderResult, quicktype } from 'quicktype-core';
+import { basename, dirname, extname } from 'path';
+import { InputData, JSONSchemaInput, JSONSchemaSourceData, JSONSchemaStore, MultiFileRenderResult, RendererOptions, SerializedRenderResult, quicktypeMultiFile } from 'quicktype-core';
 import { schemaForTypeScriptSources } from 'quicktype-typescript-input';
 
 interface Config {
@@ -12,7 +12,10 @@ interface Config {
 
 async function load(globPath: string, configs: Config[]) {
   const filePaths: string[] = globSync(globPath);
+  const filePathMap: any = {};
+  filePaths.forEach(filePath => filePathMap[basename(filePath, extname(filePath))] = filePath.replace(extname(filePath), ''));
   console.log(`📁 ${filePaths}`);
+  console.log(filePathMap);
   const jsonSchema: JSONSchemaSourceData = schemaForTypeScriptSources(filePaths);
   // @ts-ignore
   const jsonStore: JSONSchemaStore = new JSONSchemaStore();
@@ -22,8 +25,10 @@ async function load(globPath: string, configs: Config[]) {
   inputData.addInput(jsonInput);
   for (let i = 0; i < configs.length; i++) {
     const { lang, ext, rendererOptions } = configs[i];
-    const result: SerializedRenderResult = await quicktype({ inputData, rendererOptions, lang });
-    createFile(`./dist/${lang}/types.${ext}`, result.lines.join('\n'));
+    const results: MultiFileRenderResult = await quicktypeMultiFile({ inputData, rendererOptions, lang });
+    results.forEach((result: SerializedRenderResult, name: string) => {
+      if (name.endsWith(ext)) createFile(`./dist/${lang}/${filePathMap[name.replace(extname(name), '')]}.${ext}`, result.lines.join('\n'));
+    });
   }
 }
 
